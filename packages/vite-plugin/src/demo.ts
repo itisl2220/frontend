@@ -2,6 +2,7 @@ import type { Plugin } from "vite";
 import { glob } from "glob";
 import path from "path";
 import { readFileSync } from "fs";
+import { rootDir } from "./utils";
 
 export function demo(enable?: boolean): Plugin {
 	const virtualModuleIds = ["virtual:demo"];
@@ -16,13 +17,16 @@ export function demo(enable?: boolean): Plugin {
 		},
 		async load(id) {
 			if (id === "\0virtual:demo") {
-				const demo = {};
+				const demo: any = {};
 
 				if (enable) {
-					const files = await glob("./src/modules/demo/views/crud/components/**", {
-						stat: true,
-						withFileTypes: true
-					});
+					const files = await glob(
+						rootDir("./src/modules/demo/views/crud/components") + "/**",
+						{
+							stat: true,
+							withFileTypes: true,
+						},
+					);
 
 					for (const file of files) {
 						if (file.isFile()) {
@@ -41,6 +45,6 @@ export function demo(enable?: boolean): Plugin {
 					export const demo = ${JSON.stringify(demo)};
 				`;
 			}
-		}
+		},
 	};
 }

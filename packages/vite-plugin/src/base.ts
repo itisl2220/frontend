@@ -1,9 +1,10 @@
 import type { Plugin } from "vite";
-import { createSvg } from "./svg";
-import { createTag } from "./tag";
 import { createEps } from "./eps";
-import { createMenu } from "./menu";
 import { parseJson } from "./utils";
+import { createTag } from "./tag";
+import { createSvg } from "./svg";
+import { createMenu } from "./menu";
+import { config } from "./config";
 
 export function base(): Plugin {
 	return {
@@ -16,7 +17,7 @@ export function base(): Plugin {
 					res.end(JSON.stringify(data));
 				}
 
-				if (req.url?.includes("__cool")) {
+				if (req.originalUrl?.includes("__cool")) {
 					const body = await parseJson(req);
 
 					switch (req.url) {
@@ -33,12 +34,12 @@ export function base(): Plugin {
 						default:
 							return done({
 								code: 1001,
-								message: "未知请求"
+								message: "未知请求",
 							});
 					}
 
 					done({
-						code: 1000
+						code: 1000,
 					});
 				} else {
 					next();
@@ -46,10 +47,18 @@ export function base(): Plugin {
 			});
 		},
 		transform(code, id) {
-			return createTag(code, id);
+			if (config.type == "admin") {
+				return createTag(code, id);
+			}
+
+			return code;
 		},
 		transformIndexHtml(html) {
-			return createSvg(html);
-		}
+			if (config.type == "admin") {
+				return createSvg(html);
+			}
+
+			return html;
+		},
 	};
 }

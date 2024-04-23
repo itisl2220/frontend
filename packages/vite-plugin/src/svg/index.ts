@@ -1,10 +1,11 @@
 import { readFileSync, readdirSync } from "fs";
 import { extname } from "path";
+import { rootDir } from "../utils";
 
 function findFiles(dir: string): string[] {
 	const res: string[] = [];
 	const dirs = readdirSync(dir, {
-		withFileTypes: true
+		withFileTypes: true,
 	});
 	for (const d of dirs) {
 		if (d.isDirectory()) {
@@ -26,7 +27,7 @@ function findFiles(dir: string): string[] {
 									height = s3;
 								}
 								return "";
-							}
+							},
 						);
 						if (!/(viewBox="[^>+].*?")/g.test($2)) {
 							content += `viewBox="0 0 ${width} ${height}"`;
@@ -42,13 +43,13 @@ function findFiles(dir: string): string[] {
 }
 
 export function createSvg(html: string) {
-	const res = findFiles("./src/");
+	const res = findFiles(rootDir("./src/"));
 
 	return html.replace(
 		"<body>",
 		`<body>
 			<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="position: absolute; width: 0; height: 0">
 				${res.join("")}
-			</svg>`
+			</svg>`,
 	);
 }

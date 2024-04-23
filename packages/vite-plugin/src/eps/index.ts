@@ -1,66 +1,83 @@
 import { createDir, error, firstUpperCase, readFile, toCamel } from "../utils";
 import { join } from "path";
-import { Entity, DistPath } from "./config";
+import { Entity, DistDir } from "./config";
 import axios from "axios";
-import { isArray, isEmpty, last, merge, unionBy } from "lodash-es";
+import { isArray, isEmpty, last, merge } from "lodash";
 import { createWriteStream } from "fs";
 import prettier from "prettier";
-import { proxy } from "../../../src/config/proxy";
+import { config } from "../config";
 import type { Eps } from "../types";
+
+// eps 数据文件路径
+const epsJsonPath = join(DistDir, "eps.json");
+
+// eps 描述文件路径
+const epsDtsPath = join(DistDir, "eps.d.ts");
+
+let service = {};
+let list: Eps.Entity[] = [];
+let customList: Eps.Entity[] = [];
 
 // 获取方法名
 function getNames(v: any) {
 	return Object.keys(v).filter((e) => !["namespace", "permission"].includes(e));
 }
 
-// 数据
-const service = {};
-let list: Eps.Entity[] = [];
-let localList: Eps.Entity[] = [];
-
 // 获取数据
-async function getData(temps?: Eps.Entity[]) {
-	// 记录本地数据
-	if (!isEmpty(temps)) {
-		localList = (temps || []).map((e) => {
+async function getData(data?: Eps.Entity[]) {
+	// 自定义数据
+	if (!isEmpty(data)) {
+		customList = (data || []).map((e) => {
 			return {
 				...e,
-				isLocal: true
+				isLocal: true,
 			};
 		});
 	}
 
 	// 本地文件
 	try {
-		list = JSON.parse(readFile(join(DistPath, "eps.json")) || "[]");
+		list = readFile(epsJsonPath, true) || [];
 	} catch (err: any) {
-		error(`[cool-eps] ${join(DistPath, "eps.json")} 文件异常, ${err.message}`);
+		error(`[cool-eps] ${epsJsonPath} 文件异常, ${err.message}`);
 	}
 
-	// 远程地址
-	const url = proxy["/dev/"].target + "/admin/base/open/eps";
+	// 请求地址
+	let url = config.reqUrl;
+
+	switch (config.type) {
+		case "app":
+			url += "/app/base/comm/eps";
+			break;
+
+		case "admin":
+			url += "/admin/base/open/eps";
+			break;
+	}
 
 	// 请求数据
 	await axios
 		.get(url, {
-			timeout: 5000
+			timeout: 5000,
 		})
 		.then((res) => {
-			const { code, data } = res.data;
+			const { code, data, message } = res.data;
 
 			if (code === 1000) {
 				if (!isEmpty(data) && data) {
 					merge(list, Object.values(data).flat() as Eps.Entity[]);
 				}
+			} else {
+				error(`[cool-eps] ${message}`);
 			}
 		})
 		.catch(() => {
 			error(`[cool-eps] 后端未启动 ➜  ${url}`);
 		});
 
-	// 合并本地数据
-	if (isArray(localList)) {
-		localList.forEach((e) => {
+	// 合并自定义数据
+	if (isArray(customList)) {
+		customList.forEach((e) => {
 			const d = list.find((a) => e.prefix === a.prefix);
 
 			if (d) {
@@ -71,29 +88,36 @@ async function getData(temps?: Eps.Entity[]) {
 		});
 	}
 
-	list = unionBy(list, "prefix");
+	// 设置默认值
+	list.forEach((e) => {
+		if (!e.namespace) {
+			e.namespace = "";
+		}
+
+		if (!e.api) {
+			e.api = [];
+		}
+	});
 }
 
 // 创建 json 文件
 function createJson() {
-	const d = list
-		.filter((e) => !e.isLocal)
-		.map((e) => {
-			return {
-				prefix: e.prefix,
-				name: e.name || "",
-				api: e.api.map((e) => {
-					return {
-						name: e.name,
-						method: e.method,
-						path: e.path
-					};
-				})
-			};
-		});
+	const d = list.map((e) => {
+		return {
+			prefix: e.prefix,
+			name: e.name || "",
+			api: e.api.map((e) => {
+				return {
+					name: e.name,
+					method: e.method,
+					path: e.path,
+				};
+			}),
+		};
+	});
 
-	createWriteStream(join(DistPath, "eps.json"), {
-		flags: "w"
+	createWriteStream(epsJsonPath, {
+		flags: "w",
 	}).write(JSON.stringify(d));
 }
 
@@ -102,10 +126,10 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 	// 获取类型
 	function getType({ propertyName, type }: any) {
 		for (const map of Entity.mapping) {
-			if (map.custom) {
-				const resType = map.custom({ propertyName, type });
-				if (resType) return resType;
-			}
+			// if (map.custom) {
+			// 	const resType = map.custom({ propertyName, type });
+			// 	if (resType) return resType;
+			// }
 			if (map.test) {
 				if (map.test.includes(type)) return map.type;
 			}
@@ -120,7 +144,6 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 		for (const item of list) {
 			if (!item.name) continue;
 			const t = [`interface ${item.name} {`];
-
 			for (const col of item.columns || []) {
 				// 描述
 				t.push("\n");
@@ -130,8 +153,8 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 				t.push(
 					`${col.propertyName}?: ${getType({
 						propertyName: col.propertyName,
-						type: col.type
-					})};`
+						type: col.type,
+					})};`,
 				);
 			}
 			t.push("\n");
@@ -167,7 +190,7 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 					proxy?: boolean;
 					[key: string]: any;
 				}): Promise<any>;
-		`
+		`,
 		];
 
 		// 处理数据
@@ -193,9 +216,9 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 
 							item.api.forEach((a) => {
 								// 方法名
-								const n = (a.name || last(a.path.split("/")) || "").replace(
-									/[:\/]/g,
-									""
+								const n = toCamel(a.name || last(a.path.split("/")) || "").replace(
+									/[:\/-]/g,
+									"",
 								);
 
 								if (n) {
@@ -217,7 +240,7 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 										const a = `${p.name}${p.required ? "" : "?"}`;
 										const b = `${p.schema.type || "string"}`;
 
-										q.push(`"${a}": ${b},`);
+										q.push(`${a}: ${b},`);
 									});
 
 									if (isEmpty(q)) {
@@ -264,14 +287,12 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 									t.push(" */\n");
 
 									t.push(
-										`"${n}"(data${q.length == 1 ? "?" : ""}: ${q.join(
-											""
-										)}): Promise<${res}>;`
+										`${n}(data${q.length == 1 ? "?" : ""}: ${q.join(
+											"",
+										)}): Promise<${res}>;`,
 									);
 
-									if (!permission.includes(n)) {
-										permission.push(n);
-									}
+									permission.push(n);
 								}
 							});
 
@@ -282,8 +303,8 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 							t.push(" */\n");
 							t.push(
 								`permission: { ${permission
-									.map((e) => `"${e}": string;`)
-									.join("\n")} };`
+									.map((e) => `${e}: string;`)
+									.join("\n")} };`,
 							);
 
 							// 权限状态
@@ -293,8 +314,8 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 							t.push(" */\n");
 							t.push(
 								`_permission: { ${permission
-									.map((e) => `"${e}": boolean;`)
-									.join("\n")} };`
+									.map((e) => `${e}: boolean;`)
+									.join("\n")} };`,
 							);
 
 							// 请求
@@ -345,12 +366,12 @@ async function createDescribe({ list, service }: { list: Eps.Entity[]; service: 
 		semi: true,
 		singleQuote: false,
 		printWidth: 100,
-		trailingComma: "none"
+		trailingComma: "none",
 	});
 
 	// 创建 eps 描述文件
-	createWriteStream(join(DistPath, "eps.d.ts"), {
-		flags: "w"
+	createWriteStream(epsDtsPath, {
+		flags: "w",
 	}).write(content);
 }
 
@@ -360,7 +381,7 @@ function createService() {
 		// 分隔路径
 		const arr = e.prefix
 			.replace(/\//, "")
-			.replace("admin", "")
+			.replace(config.type, "")
 			.split("/")
 			.filter(Boolean)
 			.map(toCamel);
@@ -382,32 +403,27 @@ function createService() {
 					if (!d[k]) {
 						d[k] = {
 							namespace: e.prefix.substring(1, e.prefix.length),
-							permission: {}
+							permission: {},
 						};
 					}
 
 					// 创建方法
 					e.api.forEach((a) => {
 						// 方法名
-						let n = a.path.replace("/", "");
+						const n = a.path.replace("/", "");
 
-						if (n) {
-							// 示例 /info/:id
-							if (n.includes("/:")) {
-								a.path = a.path.split("/:")[0];
-								n = n.split("/:")[0];
-							}
-
+						if (n && !/[-:]/g.test(n)) {
 							d[k][n] = a;
 						}
 					});
 
 					// 创建权限
 					getNames(d[k]).forEach((e) => {
-						d[k].permission[e] = `${d[k].namespace.replace("admin/", "")}/${e}`.replace(
-							/\//g,
-							":"
-						);
+						d[k].permission[e] =
+							`${d[k].namespace.replace(`${config.type}/`, "")}/${e}`.replace(
+								/\//g,
+								":",
+							);
 					});
 				}
 			}
@@ -426,7 +442,7 @@ export async function createEps(query?: { list: any[] }) {
 	createService();
 
 	// 创建临时目录
-	createDir(DistPath);
+	createDir(DistDir);
 
 	// 创建 json 文件
 	createJson();
@@ -436,6 +452,6 @@ export async function createEps(query?: { list: any[] }) {
 
 	return {
 		service,
-		list
+		list,
 	};
 }

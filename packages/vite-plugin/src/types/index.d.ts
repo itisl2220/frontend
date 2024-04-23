@@ -1,3 +1,5 @@
+export type Type = "app" | "admin";
+
 export namespace Eps {
 	interface Entity {
 		api: {
@@ -28,6 +30,30 @@ export namespace Eps {
 		module: string;
 		name: string;
 		prefix: string;
+		[key: string]: any;
+	}
+}
+
+export namespace Ctx {
+	type Pages = {
+		path?: string;
+		style?: {
+			[key: string]: any;
+		};
+		[key: string]: any;
+	}[];
+
+	type SubPackages = {
+		root?: string;
+		pages?: Pages;
+		[key: string]: any;
+	}[];
+
+	interface Data {
+		appid?: string;
+		pages?: Pages;
+		subPackages?: SubPackages;
+		modules?: string[];
 		[key: string]: any;
 	}
 }
