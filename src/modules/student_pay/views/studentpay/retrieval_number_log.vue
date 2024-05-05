@@ -28,7 +28,7 @@
 	</cl-crud>
 </template>
 
-<script lang="ts" name="studentpay-student_pay_order" setup>
+<script lang="ts" name="studentpay-retrieval_number_log" setup>
 import { useCrud, useTable, useUpsert } from "@cool-vue/crud";
 import { useCool } from "/@/cool";
 
@@ -66,31 +66,30 @@ const Upsert = useUpsert({
 			label: "金额",
 			prop: "amount",
 			hook: "number",
-			component: { name: "el-input-number", props: { controls: false } },
+			component: { name: "el-input-number" },
 			required: true
 		},
 		{
 			label: "状态",
 			prop: "status",
-			component: {
-				name: "el-radio-group",
-				options: [
-					{ label: "启用", value: 1 },
-					{ label: "禁用", value: 0 }
-				]
-			},
+			component: { name: "el-radio-group", options: [] },
 			required: true
 		},
 		{
 			label: "支付状态",
 			prop: "payStatus",
-			component: {
-				name: "el-radio-group",
-				options: [
-					{ label: "未支付", value: 0 },
-					{ label: "已支付", value: 1 }
-				]
-			},
+			component: { name: "el-radio-group", options: [] },
+			required: true
+		},
+		{
+			label: "金流编号",
+			prop: "newebPayNo",
+			component: { name: "el-input", props: { clearable: true } }
+		},
+		{
+			label: "支付方式",
+			prop: "payType",
+			component: { name: "el-radio-group", options: [] },
 			required: true
 		},
 		{
@@ -135,15 +134,20 @@ const Table = useTable({
 			minWidth: 140,
 			component: { name: "cl-date-text" }
 		},
-
+		{ label: "取号状态", prop: "takeNoStatus", dict: [], dictColor: true, minWidth: 120 },
+		{ label: "备注", prop: "remark", showOverflowTooltip: true, minWidth: 200 },
 		{
 			label: "创建时间",
 			prop: "createTime",
 			minWidth: 160,
 			component: { name: "cl-date-text" }
 		},
-		{ label: "取号状态", prop: "takeNoStatus", dict: [], dictColor: true, minWidth: 120 },
-		{ label: "备注", prop: "remark", showOverflowTooltip: true, minWidth: 200 },
+		{
+			label: "更新时间",
+			prop: "updateTime",
+			minWidth: 160,
+			component: { name: "cl-date-text" }
+		},
 		{ type: "op", buttons: ["edit", "delete"] }
 	]
 });
